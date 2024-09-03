@@ -8,7 +8,7 @@
 char c;
 #define clear while((c = getchar()) != '\n') {}
 #define mpfr_null (mpfr_ptr)0
-
+#define precision_buff 1000
 // métodos que calculam uma aproximação de pi usando as
 // fórmulas de K. Takano e F. C. M. Stormer, respectivamente,
 // com precisão {prec} e guardam o resultado em {out} e em um arquivo
@@ -31,9 +31,9 @@ int main(int argc, char const *argv[]) {
 			clear;
 		}
 	}
-	// só pra garantir
-	precision += 10;
-	printf("precisão: %ld\n", precision - 10);
+	printf("precisão: %ld\n", precision);
+	// só pra garantir kk
+	precision += precision_buff;
 
 	// usando nosso método para aproximar pi com a fórmula de K. Takano
 	mpfr_t pi_K_Takano;
@@ -52,7 +52,7 @@ int main(int argc, char const *argv[]) {
 	    perror("Erro ao criar arquivo de output");
 	    return 1;
 	}
-	mpfr_out_str(output_file, 10, precision - 9, pi_K_Takano, MPFR_RNDN); // o -9 é pra compensar a precisão extra da linha 35
+	mpfr_out_str(output_file, 10, precision - precision_buff + 1, pi_K_Takano, MPFR_RNDZ); // o - precision_buff é pra compensar a precisão extra da linha 36
 	fclose(output_file);
 
 	// colocando o valor de pi do F. C. M. Stormer em outro arquivo
@@ -61,7 +61,7 @@ int main(int argc, char const *argv[]) {
 	    perror("Erro ao criar arquivo de output");
 	    return 1;
 	}
-	mpfr_out_str(output_file, 10, precision - 9, pi_FCM_Stormer, MPFR_RNDN);
+	mpfr_out_str(output_file, 10, precision - precision_buff + 1, pi_FCM_Stormer, MPFR_RNDZ);
 	fclose(output_file);
 
 	// comparando os dois arquivos para sabermos se os resultados foram iguais
@@ -69,8 +69,8 @@ int main(int argc, char const *argv[]) {
 	char FCM_Stormer_result[precision + 5];
 	K_Takano_result[0] = '\0';
 	FCM_Stormer_result[0] = '\0';
-	mpfr_sprintf(K_Takano_result, generate_format_str("", precision - 10), pi_K_Takano);
-	mpfr_sprintf(FCM_Stormer_result, generate_format_str("", precision - 10), pi_FCM_Stormer);
+	mpfr_sprintf(K_Takano_result, generate_format_str("", precision - precision_buff), pi_K_Takano);
+	mpfr_sprintf(FCM_Stormer_result, generate_format_str("", precision - precision_buff), pi_FCM_Stormer);
 
 	if(!strcmp(FCM_Stormer_result, K_Takano_result))
 		printf("\nSucesso: as duas aproximações são idênticas\n");
@@ -119,9 +119,13 @@ int K_Takano_method(mpfr_t out, long int prec) {
 	for(int i = 1; i < 4; i++) mpfr_add(out, out, term_f[i], MPFR_RNDN);
 
 	//gerando uma string de formatação personalizada para o mpfr_printf
-	char *format_str = generate_format_str("PI (pelo método de K. Takano): ", prec - 10);
+	char *format_str = generate_format_str("PI (pelo método de K. Takano): ", prec - precision_buff + 2);
 	// printando nosso resultado
-	mpfr_printf(format_str, out);
+	char Takano_result[prec + 5];
+	mpfr_sprintf(Takano_result, format_str, out);
+	Takano_result[strlen(Takano_result) - 3] = '\n';
+	Takano_result[strlen(Takano_result) - 2] = '\0';
+	printf("%s", Takano_result);
 	// liberando a string de formatação da memória
 	free(format_str);
 
@@ -165,8 +169,12 @@ int FCM_Stormer_method(mpfr_t out, long int prec) {
 	mpfr_swap(out, term_f[0]);
 	for(int i = 1; i < 4; i++) mpfr_add(out, out, term_f[i], MPFR_RNDN);
 
-	char *format_str = generate_format_str("PI (pelo método de F. C. M. Stormer): ", prec - 10);
-	mpfr_printf(format_str, out);
+	char Stormer_result[prec + 5];
+	char *format_str = generate_format_str("PI (pelo método de F. C. M. Stormer): ", prec - precision_buff + 2);
+	mpfr_sprintf(Stormer_result, format_str, out);
+	Stormer_result[strlen(Stormer_result) - 3] = '\n';
+	Stormer_result[strlen(Stormer_result) - 2] = '\0';
+	printf("%s", Stormer_result);
 	free(format_str);
 
 	for(int i = 0; i < 4; i++) {
