@@ -8,42 +8,46 @@
 char c;
 #define clear while((c = getchar()) != '\n') {}
 #define mpfr_null (mpfr_ptr)0
-#define precision_buff 1000
+#define prec_buff 1000
 // métodos que calculam uma aproximação de pi usando as
 // fórmulas de K. Takano e F. C. M. Stormer, respectivamente,
 // com precisão {prec} e guardam o resultado em {out} e em um arquivo
-int K_Takano_method(mpfr_t out, long int prec);
-int FCM_Stormer_method(mpfr_t out, long int prec);
+int K_Takano_method(mpfr_t out);
+int FCM_Stormer_method(mpfr_t out);
 // gera uma string de formatação bonitinha para o mpfr_printf que
 // inclui uma precisão variável
 char *generate_format_str(char *label, long int prec);
+// compara nossa estimativa A com a estimativa B e retorna o número de
+// casas decimais equivalentes entre as duas estimativas (nossa precisão)
+long int compare_results(mpfr_t Takano_result, mpfr_t Stormer_result);
+
+// nossa precisão base (a verdadeira precisão é menor por conta das limitações das fórmulas)
+long int prec = -1;
 
 int main(int argc, char const *argv[]) {
 	setlocale(LC_ALL, "");
 
-	long int precision = -1;
 	if(argc > 1) {
-		precision = atol(argv[1]);
+		prec = atol(argv[1]);
 	} else {
-		while(precision == -1) {
+		while(prec == -1) {
 			printf("com qual precisão você quer calcular pi (em número de casas decimais)?\n");
-			scanf("%ld", &precision);
+			scanf("%ld", &prec);
 			clear;
 		}
 	}
-	printf("precisão: %ld\n", precision);
-	// só pra garantir kk
-	precision += precision_buff;
+	// só pra garantir maior corretude quando a precisão fornecida pelo usuário é baixa de mais
+	prec += prec_buff;
 
 	// usando nosso método para aproximar pi com a fórmula de K. Takano
 	mpfr_t pi_K_Takano;
-	mpfr_init2(pi_K_Takano, precision);
-	K_Takano_method(pi_K_Takano, precision);
+	mpfr_init2(pi_K_Takano, prec);
+	K_Takano_method(pi_K_Takano);
 	printf("\n");
 	// e agora com a fórmula de F. C. M. Stormer
 	mpfr_t pi_FCM_Stormer;
-	mpfr_init2(pi_FCM_Stormer, precision);
-	K_Takano_method(pi_FCM_Stormer, precision);
+	mpfr_init2(pi_FCM_Stormer, prec);
+	FCM_Stormer_method(pi_FCM_Stormer);
 
 	// colocando o valor de pi do K. Takano em um arquivo, só por curiosidade
 	// e para termos um registro "permanente", diferentemente do que é printado no terminal
@@ -52,7 +56,7 @@ int main(int argc, char const *argv[]) {
 	    perror("Erro ao criar arquivo de output");
 	    return 1;
 	}
-	mpfr_out_str(output_file, 10, precision - precision_buff + 1, pi_K_Takano, MPFR_RNDZ); // o - precision_buff é pra compensar a precisão extra da linha 36
+	mpfr_out_str(output_file, 10, prec - prec_buff + 1, pi_K_Takano, MPFR_RNDZ); // o - prec_buff é pra compensar a precisão extra da linha 40
 	fclose(output_file);
 
 	// colocando o valor de pi do F. C. M. Stormer em outro arquivo
@@ -61,26 +65,22 @@ int main(int argc, char const *argv[]) {
 	    perror("Erro ao criar arquivo de output");
 	    return 1;
 	}
-	mpfr_out_str(output_file, 10, precision - precision_buff + 1, pi_FCM_Stormer, MPFR_RNDZ);
+	mpfr_out_str(output_file, 10, prec - prec_buff + 1, pi_FCM_Stormer, MPFR_RNDZ);
 	fclose(output_file);
 
-	// comparando os dois arquivos para sabermos se os resultados foram iguais
-	char K_Takano_result[precision + 5];
-	char FCM_Stormer_result[precision + 5];
-	K_Takano_result[0] = '\0';
-	FCM_Stormer_result[0] = '\0';
-	mpfr_sprintf(K_Takano_result, generate_format_str("", precision - precision_buff), pi_K_Takano);
-	mpfr_sprintf(FCM_Stormer_result, generate_format_str("", precision - precision_buff), pi_FCM_Stormer);
-
-	if(!strcmp(FCM_Stormer_result, K_Takano_result))
-		printf("\nSucesso: as duas aproximações são idênticas\n");
-	else
-		printf("\nFracasso: as duas aproximações são diferentes\n");
+	// achando quantas casas decimais estão equivalentes nas duas estimativas e printando elas
+	long int correct_decimal_places = compare_results(pi_K_Takano, pi_FCM_Stormer);
+	char pi_correct_portion[correct_decimal_places + 5];
+	pi_correct_portion[0] = '\0';
+	mpfr_sprintf(pi_correct_portion, generate_format_str("", correct_decimal_places + 2), pi_K_Takano); // o +2 impede o generate_format_str de arredondar a parte que queremos
+	pi_correct_portion[strlen(pi_correct_portion) - 2] = '\0';
+	printf("\nPorção equivalente das aproximações: %s\n\n", pi_correct_portion);
+	printf("RESULTADO:\n%ld casas decimais estimadas\n%ld casas decimais equivalentes\n", prec - prec_buff, correct_decimal_places);
 
 	return 0;
 }
 
-int K_Takano_method(mpfr_t out, long int prec) {
+int K_Takano_method(mpfr_t out) {
 	// criando listas de floats, racionais e ints de precisão arbitrária
 	// para os valores que serão usados na fórmula
 	mpfr_t arctg_f[4];
@@ -119,13 +119,14 @@ int K_Takano_method(mpfr_t out, long int prec) {
 	for(int i = 1; i < 4; i++) mpfr_add(out, out, term_f[i], MPFR_RNDN);
 
 	//gerando uma string de formatação personalizada para o mpfr_printf
-	char *format_str = generate_format_str("PI (pelo método de K. Takano): ", prec - precision_buff + 2);
+	char *format_str = generate_format_str("PI (pelo método de K. Takano): ", prec - prec_buff + 2);
 	// printando nosso resultado
 	char Takano_result[prec + 5];
 	mpfr_sprintf(Takano_result, format_str, out);
-	Takano_result[strlen(Takano_result) - 3] = '\n';
+	//Takano_result[strlen(Takano_result) - 3] = '\n';
 	Takano_result[strlen(Takano_result) - 2] = '\0';
 	printf("%s", Takano_result);
+	printf("\n");
 	// liberando a string de formatação da memória
 	free(format_str);
 
@@ -140,7 +141,7 @@ int K_Takano_method(mpfr_t out, long int prec) {
 	return 0;
 }
 
-int FCM_Stormer_method(mpfr_t out, long int prec) {
+int FCM_Stormer_method(mpfr_t out) {
 	// tudo aqui funciona da mesma forma que na outra função
 	// só o que muda são os coeficientes e as frações
 	mpfr_t arctg_f[4];
@@ -170,11 +171,12 @@ int FCM_Stormer_method(mpfr_t out, long int prec) {
 	for(int i = 1; i < 4; i++) mpfr_add(out, out, term_f[i], MPFR_RNDN);
 
 	char Stormer_result[prec + 5];
-	char *format_str = generate_format_str("PI (pelo método de F. C. M. Stormer): ", prec - precision_buff + 2);
+	char *format_str = generate_format_str("PI (pelo método de F. C. M. Stormer): ", prec - prec_buff + 2);
 	mpfr_sprintf(Stormer_result, format_str, out);
-	Stormer_result[strlen(Stormer_result) - 3] = '\n';
+	//Stormer_result[strlen(Stormer_result) - 3] = '\n';
 	Stormer_result[strlen(Stormer_result) - 2] = '\0';
 	printf("%s", Stormer_result);
+	printf("\n");
 	free(format_str);
 
 	for(int i = 0; i < 4; i++) {
@@ -195,6 +197,23 @@ char *generate_format_str(char *label, long int prec) {
 	char prec_str[32];
 	sprintf(prec_str, "%ld", prec);
 	strcat(format_str, prec_str);
-	strcat(format_str, "Rf\n");
+	strcat(format_str, "Rf");
 	return format_str;
+}
+
+long int compare_results(mpfr_t Takano_result, mpfr_t Stormer_result) {
+	long int decimal_places = 0;
+	char K_Takano_result[prec + 5];
+	char FCM_Stormer_result[prec + 5];
+	K_Takano_result[0] = '\0';
+	FCM_Stormer_result[0] = '\0';
+	mpfr_sprintf(K_Takano_result, generate_format_str("", prec - prec_buff), Takano_result);
+	mpfr_sprintf(FCM_Stormer_result, generate_format_str("", prec - prec_buff), Stormer_result);
+
+	for(int i = 0; i < strlen(K_Takano_result); i++) {
+		if(K_Takano_result[i] == FCM_Stormer_result[i]) decimal_places++;
+		else break;
+	}
+
+	return decimal_places - 2;
 }
